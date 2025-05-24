@@ -465,7 +465,7 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                                 for char in new_content:
                                                     self.streaming_response.stream_text_token(char)
                                                     import time
-                                                    time.sleep(0.01)  # Small delay for streaming effect
+                                                    #time.sleep(0.0001)  # Small delay for streaming effect
                                         # Always update final_response with the latest content
                                         final_response = content
                                         
