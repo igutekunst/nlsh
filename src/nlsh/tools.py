@@ -182,12 +182,14 @@ def execute_shell_command_tool(command: str, confirm: bool = True) -> str:
         response = f"Command executed: {command}\n"
         response += f"Exit code: {result.return_code}\n"
         
-        # Output was already displayed live, so just report on the result
+        # Include the actual output so the LLM can reference it
         if result.output:
-            response += f"Output captured ({len(result.output)} characters)"
+            response += f"Output:\n{result.output.strip()}"
+        else:
+            response += "No output produced"
         
         if result.error:
-            response += f"\nError output captured ({len(result.error)} characters)"
+            response += f"\nError output:\n{result.error.strip()}"
         
         return response
         

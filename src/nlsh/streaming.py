@@ -4,7 +4,7 @@ import time
 import threading
 import asyncio
 import sys
-from typing import Iterator, Any, Dict, Optional, Callable, AsyncIterator
+from typing import Iterator, Any, Dict, Optional, Callable, AsyncIterator, Union
 from rich.console import Console
 from rich.live import Live
 from rich.spinner import Spinner
@@ -158,11 +158,18 @@ class StreamingResponse:
 class ConfirmationHandler:
     """Handle interactive confirmations during streaming"""
     
-    def __init__(self):
+    def __init__(self, streaming_response: Optional[Union['StreamingResponse', 'AsyncStreamingResponse']] = None):
         self.pending_confirmations = []
+        self.streaming_response = streaming_response
     
     def request_confirmation(self, command: str) -> bool:
         """Request confirmation for a command with simple y/n prompt"""
+        # Stop any active spinner to prevent display conflicts
+        spinner_was_running = False
+        if self.streaming_response and self.streaming_response.current_spinner:
+            spinner_was_running = True
+            self.streaming_response.current_spinner.stop()
+        
         console.print()  # Add space
         console.print(Panel(
             f"[yellow]Command to execute:[/yellow]\n[cyan]{command}[/cyan]",
@@ -170,7 +177,13 @@ class ConfirmationHandler:
             border_style="yellow"
         ))
         
-        return confirm_action("Do you want to execute this command?")
+        result = confirm_action("Do you want to execute this command?")
+        
+        # Restart spinner if it was running (for cases where we want to continue the tool)
+        # Note: This is mainly for consistency, though typically after confirmation 
+        # the tool execution will start a new spinner anyway
+        
+        return result
 
 
 class AsyncStreamingResponse:
@@ -253,9 +266,13 @@ class AsyncStreamingResponse:
 
 def create_streaming_interface() -> tuple[StreamingResponse, ConfirmationHandler]:
     """Create a streaming interface with confirmation handler"""
-    return StreamingResponse(), ConfirmationHandler()
+    streaming_response = StreamingResponse()
+    confirmation_handler = ConfirmationHandler(streaming_response)
+    return streaming_response, confirmation_handler
 
 
 def create_async_streaming_interface() -> tuple[AsyncStreamingResponse, ConfirmationHandler]:
     """Create an async streaming interface with confirmation handler"""
-    return AsyncStreamingResponse(), ConfirmationHandler() 
+    streaming_response = AsyncStreamingResponse()
+    confirmation_handler = ConfirmationHandler(streaming_response)
+    return streaming_response, confirmation_handler 
