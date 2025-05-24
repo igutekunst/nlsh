@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nlsh-ai"
-version = "0.1.4"
+version = "0.1.5"
 description = "Natural Language Shell - AI-augmented command line interface"
 authors = ["Isaac Harrison Gutekunst <isaac@supercortex.io>"]
 license = "MIT"
@@ -57,7 +57,4 @@ target-version = ['py39']
 
 [tool.isort]
 profile = "black"
-multi_line_output = 3
-
-[tool.poetry.extras]
-anthropic = ["langchain-anthropic"] 
+multi_line_output = 3 
