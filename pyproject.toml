@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nlsh-ai"
-version = "0.1.5"
+version = "0.1.7"
 description = "Natural Language Shell - AI-augmented command line interface"
 authors = ["Isaac Harrison Gutekunst <isaac@supercortex.io>"]
 license = "MIT"

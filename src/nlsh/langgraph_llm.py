@@ -186,7 +186,20 @@ class LangGraphLLMInterface:
             # Extract the final response
             last_message = result["messages"][-1]
             if isinstance(last_message, AIMessage):
-                return last_message.content
+                content = last_message.content
+                
+                # Handle different content formats (OpenAI vs Anthropic)
+                if isinstance(content, list):
+                    # Anthropic format: list of content blocks
+                    text_content = ""
+                    for block in content:
+                        if isinstance(block, dict) and block.get('type') == 'text':
+                            text_content += block.get('text', '')
+                    return text_content
+                elif isinstance(content, str):
+                    return content
+                else:
+                    return str(content)
             
             return "No response generated"
             
@@ -210,7 +223,20 @@ class LangGraphLLMInterface:
             # Extract commands from the final response
             last_message = result["messages"][-1]
             if isinstance(last_message, AIMessage):
-                commands = self._parse_commands(last_message.content)
+                content = last_message.content
+                
+                # Handle different content formats (OpenAI vs Anthropic)
+                if isinstance(content, list):
+                    # Anthropic format: list of content blocks
+                    text_content = ""
+                    for block in content:
+                        if isinstance(block, dict) and block.get('type') == 'text':
+                            text_content += block.get('text', '')
+                    content = text_content
+                elif not isinstance(content, str):
+                    content = str(content)
+                
+                commands = self._parse_commands(content)
                 return commands
             
             return []
@@ -405,6 +431,19 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                 else:
                                     # Stream text content token by token if available
                                     content = getattr(message, 'content', '')
+                                    
+                                    # Handle different content formats (OpenAI vs Anthropic)
+                                    if isinstance(content, list):
+                                        # Anthropic format: list of content blocks
+                                        text_content = ""
+                                        for block in content:
+                                            if isinstance(block, dict) and block.get('type') == 'text':
+                                                text_content += block.get('text', '')
+                                        content = text_content
+                                    elif not isinstance(content, str):
+                                        # Convert to string if it's some other format
+                                        content = str(content)
+                                    
                                     if content:
                                         # For the final agent response (after tools), stream the new content
                                         if agent_execution_count > 1 or not current_tool_calls:
@@ -418,7 +457,7 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                                     time.sleep(0.01)  # Small delay for streaming effect
                                         # Always update response_content with the latest content
                                         response_content = content
-                                        
+                    
                     elif node_name == "tools":
                         # Handle tool results
                         messages = node_output.get("messages", [])
@@ -493,6 +532,19 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                 else:
                                     # Stream text content
                                     content = getattr(message, 'content', '')
+                                    
+                                    # Handle different content formats (OpenAI vs Anthropic)
+                                    if isinstance(content, list):
+                                        # Anthropic format: list of content blocks
+                                        text_content = ""
+                                        for block in content:
+                                            if isinstance(block, dict) and block.get('type') == 'text':
+                                                text_content += block.get('text', '')
+                                        content = text_content
+                                    elif not isinstance(content, str):
+                                        # Convert to string if it's some other format
+                                        content = str(content)
+                                    
                                     if content:
                                         # For the final agent response (after tools), stream the new content
                                         if agent_execution_count > 1 or not current_tool_calls:
@@ -503,10 +555,10 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                                 for char in new_content:
                                                     self.streaming_response.stream_text_token(char)
                                                     import time
-                                                    #time.sleep(0.0001)  # Small delay for streaming effect
+                                                    time.sleep(0.01)  # Small delay for streaming effect
                                         # Always update final_response with the latest content
                                         final_response = content
-                                        
+                    
                     elif node_name == "tools":
                         # Handle tool results
                         messages = node_output.get("messages", [])
