@@ -254,22 +254,22 @@ def handle_llm_command(
         for i, cmd in enumerate(suggested_commands, 1):
             console.print(f"  {i}. [cyan]{cmd}[/cyan]")
         
-        if confirm_action("\nExecute these commands?"):
+        if confirm_action("Do you want to execute these commands?"):
             executed_commands = []
             execution_results = []
             
             for cmd in suggested_commands:
                 console.print(f"\n[green]Executing:[/green] {cmd}")
-                result = shell_manager.execute_command(cmd)
+                # Use live output execution for real-time display
+                result = shell_manager.execute_command_with_live_output(cmd)
                 
                 executed_commands.append(cmd)
                 execution_results.append(result)
                 
-                # Display output
-                if result.output:
-                    console.print(result.output)
-                if result.error:
-                    console.print(f"[red]Error:[/red] {result.error}")
+                # Don't need to display output since it was shown live
+                # Just show error status if command failed
+                if result.return_code != 0:
+                    console.print(f"[red]Command failed with exit code: {result.return_code}[/red]")
                     
             # Log the interaction
             history_manager.log_llm_interaction(
@@ -306,16 +306,16 @@ def handle_shell_command(
 ):
     """Handle regular shell commands"""
     try:
-        result = shell_manager.execute_command(command)
+        # Use live output execution for real-time display
+        result = shell_manager.execute_command_with_live_output(command)
         
         # Log the command
         history_manager.log_shell_command(command, result)
         
-        # Display output
-        if result.output:
-            console.print(result.output)
-        if result.error:
-            console.print(f"[red]{result.error}[/red]")
+        # Don't need to display output since it was shown live
+        # Just show error status if command failed
+        if result.return_code != 0:
+            console.print(f"[red]Command failed with exit code: {result.return_code}[/red]")
             
     except Exception as e:
         console.print(f"[red]Shell Error: {e}[/red]")

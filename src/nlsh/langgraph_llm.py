@@ -339,6 +339,8 @@ Remember: Your final response should contain ONLY the commands, nothing else.
             response_content = ""
             current_tool_calls = {}  # Track tool calls for logging
             
+            print()  # Add some space before streaming starts
+            
             for event in self.graph.stream(initial_state):
                 for node_name, node_output in event.items():
                     if node_name == "agent":
@@ -361,10 +363,18 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                         
                                         self.streaming_response.start_tool_call(tool_name, tool_args)
                                 else:
-                                    # Stream text content
+                                    # Stream text content token by token if available
                                     content = getattr(message, 'content', '')
                                     if content:
-                                        response_content += content
+                                        # Check if this is new content (not already streamed)
+                                        new_content = content[len(response_content):]
+                                        if new_content:
+                                            # Stream character by character for better effect
+                                            for char in new_content:
+                                                self.streaming_response.stream_text_token(char)
+                                                import time
+                                                time.sleep(0.01)  # Small delay for streaming effect
+                                            response_content = content
                                         
                     elif node_name == "tools":
                         # Handle tool results
@@ -412,6 +422,8 @@ Remember: Your final response should contain ONLY the commands, nothing else.
             final_response = ""
             current_tool_calls = {}  # Track tool calls for logging
             
+            print()  # Add some space before streaming starts
+            
             for event in self.graph.stream(initial_state):
                 for node_name, node_output in event.items():
                     if node_name == "agent":
@@ -437,7 +449,15 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                     # Stream text content
                                     content = getattr(message, 'content', '')
                                     if content:
-                                        final_response = content
+                                        # Check if this is new content (not already streamed)
+                                        new_content = content[len(final_response):]
+                                        if new_content:
+                                            # Stream character by character for better effect
+                                            for char in new_content:
+                                                self.streaming_response.stream_text_token(char)
+                                                import time
+                                                time.sleep(0.01)  # Small delay for streaming effect
+                                            final_response = content
                                         
                     elif node_name == "tools":
                         # Handle tool results

@@ -176,17 +176,18 @@ def execute_shell_command_tool(command: str, confirm: bool = True) -> str:
         if not _confirmation_callback(command):
             return f"Command cancelled by user: {command}"
         
-        # Execute the command
-        result = _shell_manager.execute_command(command)
+        # Execute the command with live output
+        result = _shell_manager.execute_command_with_live_output(command)
         
         response = f"Command executed: {command}\n"
         response += f"Exit code: {result.return_code}\n"
         
+        # Output was already displayed live, so just report on the result
         if result.output:
-            response += f"Output:\n{result.output}"
+            response += f"Output captured ({len(result.output)} characters)"
         
         if result.error:
-            response += f"Error:\n{result.error}"
+            response += f"\nError output captured ({len(result.error)} characters)"
         
         return response
         

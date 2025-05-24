@@ -3,8 +3,10 @@
 import os
 import subprocess
 import shutil
+import asyncio
+import sys
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Iterator, AsyncIterator
 
 
 @dataclass
@@ -97,6 +99,173 @@ class ShellManager:
                 return_code=-1,
                 cwd=cwd
             )
+        except Exception as e:
+            return CommandResult(
+                command=command,
+                output="",
+                error=f"Failed to execute command: {e}",
+                return_code=-1,
+                cwd=cwd
+            )
+
+    async def execute_command_streaming(self, command: str) -> AsyncIterator[tuple[str, str]]:
+        """
+        Execute a command with streaming output.
+        
+        Yields:
+            tuple[str, str]: (stream_type, content) where stream_type is 'stdout', 'stderr', or 'exit'
+        """
+        cwd = os.getcwd()
+        shell_path = self.get_shell_path()
+        
+        try:
+            # Create subprocess with pipes for real-time output
+            if self.detected_shell == 'fish':
+                proc = await asyncio.create_subprocess_exec(
+                    shell_path, '-c', command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd
+                )
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    shell_path, '-c', command,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=cwd
+                )
+            
+            # Stream output in real-time
+            async def read_stream(stream, stream_type):
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    yield (stream_type, line.decode('utf-8', errors='replace'))
+            
+            # Create tasks for reading both stdout and stderr
+            stdout_task = asyncio.create_task(
+                self._collect_stream_output(read_stream(proc.stdout, 'stdout'))
+            )
+            stderr_task = asyncio.create_task(
+                self._collect_stream_output(read_stream(proc.stderr, 'stderr'))
+            )
+            
+            # Yield output as it comes
+            while not proc.returncode and (not stdout_task.done() or not stderr_task.done()):
+                if not stdout_task.done():
+                    try:
+                        stream_type, content = await asyncio.wait_for(stdout_task, timeout=0.1)
+                        yield (stream_type, content)
+                        stdout_task = asyncio.create_task(
+                            self._collect_stream_output(read_stream(proc.stdout, 'stdout'))
+                        )
+                    except asyncio.TimeoutError:
+                        pass
+                
+                if not stderr_task.done():
+                    try:
+                        stream_type, content = await asyncio.wait_for(stderr_task, timeout=0.1)
+                        yield (stream_type, content)
+                        stderr_task = asyncio.create_task(
+                            self._collect_stream_output(read_stream(proc.stderr, 'stderr'))
+                        )
+                    except asyncio.TimeoutError:
+                        pass
+                
+                await asyncio.sleep(0.01)  # Small delay to prevent busy waiting
+            
+            # Wait for process to complete
+            await proc.wait()
+            
+            # Cancel any remaining tasks
+            stdout_task.cancel()
+            stderr_task.cancel()
+            
+            # Yield exit code
+            yield ('exit', str(proc.returncode))
+            
+        except Exception as e:
+            yield ('stderr', f"Failed to execute command: {e}\n")
+            yield ('exit', '-1')
+
+    async def _collect_stream_output(self, stream_generator):
+        """Helper to collect single output from stream generator"""
+        async for stream_type, content in stream_generator:
+            return (stream_type, content)
+        return None
+    
+    def execute_command_with_live_output(self, command: str) -> CommandResult:
+        """
+        Execute a command with live output displayed to console.
+        Returns the complete result after execution.
+        """
+        cwd = os.getcwd()
+        shell_path = self.get_shell_path()
+        
+        try:
+            # Execute command with real-time output
+            if self.detected_shell == 'fish':
+                proc = subprocess.Popen(
+                    [shell_path, '-c', command],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    cwd=cwd,
+                    bufsize=1,  # Line buffering
+                    universal_newlines=True
+                )
+            else:
+                proc = subprocess.Popen(
+                    [shell_path, '-c', command],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    cwd=cwd,
+                    bufsize=1,  # Line buffering
+                    universal_newlines=True
+                )
+            
+            stdout_lines = []
+            stderr_lines = []
+            
+            # Read and display output in real-time
+            while True:
+                # Check if process is still running
+                if proc.poll() is not None:
+                    break
+                
+                # Read stdout if available
+                if proc.stdout:
+                    line = proc.stdout.readline()
+                    if line:
+                        print(line, end='', flush=True)
+                        stdout_lines.append(line)
+                
+                # Read stderr if available  
+                if proc.stderr:
+                    line = proc.stderr.readline()
+                    if line:
+                        print(line, end='', file=sys.stderr, flush=True)
+                        stderr_lines.append(line)
+            
+            # Get any remaining output
+            remaining_stdout, remaining_stderr = proc.communicate()
+            if remaining_stdout:
+                print(remaining_stdout, end='', flush=True)
+                stdout_lines.append(remaining_stdout)
+            if remaining_stderr:
+                print(remaining_stderr, end='', file=sys.stderr, flush=True)
+                stderr_lines.append(remaining_stderr)
+            
+            return CommandResult(
+                command=command,
+                output=''.join(stdout_lines),
+                error=''.join(stderr_lines),
+                return_code=proc.returncode,
+                cwd=cwd
+            )
+            
         except Exception as e:
             return CommandResult(
                 command=command,
