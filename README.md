@@ -18,7 +18,7 @@ An AI-augmented command line shell that wraps your existing shell and adds natur
 ### Prerequisites
 
 - Python 3.9 or higher
-- OpenAI API key
+- Anthropic API key (preferred) or OpenAI API key
 - `uv` package manager (recommended) or pip
 
 ### Using uv (recommended)
@@ -48,14 +48,29 @@ pip install -e .
 cp .env.example .env
 ```
 
-2. Edit `.env` and add your OpenAI API key:
+2. Add your LLM API key(s) to `.env`:
+
+### Anthropic Claude (Preferred)
 ```bash
-OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+ANTHROPIC_MODEL=claude-3-5-sonnet-20241022  # Optional: default model
 ```
 
-3. Optional: Configure the LLM model (default is gpt-4o-mini for cost efficiency):
+### OpenAI (Alternative/Fallback)
 ```bash
-OPENAI_MODEL=gpt-4o  # or gpt-3.5-turbo, etc.
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-4o-mini  # Optional: default model
+```
+
+**Note**: nlsh will prefer Anthropic if both keys are available. Anthropic's Claude models often provide better tool usage and reasoning for shell tasks.
+
+3. Install optional Anthropic support (if using Anthropic):
+```bash
+# With Poetry
+poetry install --extras anthropic
+
+# With pip
+pip install langchain-anthropic
 ```
 
 ## Usage

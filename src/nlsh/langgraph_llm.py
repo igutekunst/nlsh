@@ -11,6 +11,14 @@ from langgraph.prebuilt import ToolNode
 from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict, Annotated
 
+# Try to import Anthropic support
+try:
+    from langchain_anthropic import ChatAnthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+    ChatAnthropic = None
+
 from .context import ContextInfo
 from .tools import AVAILABLE_TOOLS, set_shell_manager, set_confirmation_callback
 from .streaming import create_streaming_interface, StreamingResponse, ConfirmationHandler
@@ -31,20 +39,43 @@ class LangGraphLLMInterface:
         # Load environment variables
         load_dotenv()
         
-        # Initialize OpenAI client
-        api_key = os.getenv('OPENAI_API_KEY')
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
-            
-        self.model_name = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+        # Check for available API keys and prefer Anthropic
+        anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+        openai_key = os.getenv('OPENAI_API_KEY')
         
-        # Initialize LangChain OpenAI model with tools
-        self.llm = ChatOpenAI(
-            model=self.model_name,
-            temperature=0.1,
-            api_key=api_key,
-            streaming=True  # Enable streaming
-        )
+        if anthropic_key and ANTHROPIC_AVAILABLE:
+            # Use Anthropic Claude
+            self.provider = "anthropic"
+            self.model_name = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
+            
+            # Initialize Anthropic model
+            self.llm = ChatAnthropic(
+                model=self.model_name,
+                temperature=0.1,
+                api_key=anthropic_key,
+                streaming=True  # Enable streaming
+            )
+            
+        elif openai_key:
+            # Use OpenAI
+            self.provider = "openai"
+            self.model_name = os.getenv('OPENAI_MODEL', 'gpt-4o-mini')
+            
+            # Initialize OpenAI model
+            self.llm = ChatOpenAI(
+                model=self.model_name,
+                temperature=0.1,
+                api_key=openai_key,
+                streaming=True  # Enable streaming
+            )
+            
+        else:
+            # No valid API key found
+            error_msg = "No valid API key found. "
+            if not ANTHROPIC_AVAILABLE:
+                error_msg += "Install langchain-anthropic for Anthropic support: pip install langchain-anthropic. "
+            error_msg += "Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable."
+            raise ValueError(error_msg)
         
         # Bind tools to the model
         self.llm_with_tools = self.llm.bind_tools(AVAILABLE_TOOLS)
@@ -192,7 +223,7 @@ class LangGraphLLMInterface:
         
         system_content = """You are a helpful AI assistant with access to shell and file system tools.
 
-Use shell commands and tools whenever appropriate to provide accurate, up-to-date information about the user's environment.
+You should ACTIVELY and PROACTIVELY use tools whenever they would help answer the user's question or fulfill their request.
 
 You can help users with:
 - File and directory operations
@@ -209,14 +240,21 @@ You have access to tools that can:
 - Get directory trees
 - Execute shell commands (with confirmation)
 
-IMPORTANT: Always use tools proactively when they would help answer the question or provide better information. For example:
-- If asked about files, use list_files or read_file tools
-- If asked about the current directory, use get_working_directory
-- If asked about git, use git_status or git_log tools
-- If asked about system info, use get_system_info
-- If the user wants to perform an action, suggest using the execute_shell_command tool
+IMPORTANT BEHAVIOR GUIDELINES:
+- When a user asks about something that requires a command (like "what's my IP", "what time is it", "what files are here"), USE THE execute_shell_command TOOL IMMEDIATELY
+- Don't just suggest commands - execute them using the tool
+- For informational requests that can be answered with commands, be proactive and run the commands
+- Only avoid running commands if they would be destructive (rm, format, etc.) 
+- Common safe commands to run immediately: date, curl, ls, pwd, whoami, uptime, df, ps, etc.
+
+EXAMPLES OF PROACTIVE BEHAVIOR:
+- User: "What time is it?" → Use execute_shell_command with "date"
+- User: "What's my IP?" → Use execute_shell_command with "curl ifconfig.me" 
+- User: "What files are here?" → Use list_files or execute_shell_command with "ls -la"
+- User: "What directory am I in?" → Use get_working_directory
 
 Don't rely solely on the provided context - use tools to get fresh, accurate information whenever relevant.
+Be helpful and proactive, not overly cautious about safe, informational commands.
 """
         
         if context:

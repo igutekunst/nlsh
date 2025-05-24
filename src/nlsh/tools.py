@@ -33,7 +33,7 @@ class FileOperationInput(BaseModel):
 
 class ShellCommandInput(BaseModel):
     """Input for shell command execution"""
-    command: str = Field(description="Shell command to execute")
+    command: str = Field(description="Shell command to execute (be proactive with safe informational commands)")
     confirm: bool = Field(True, description="Whether to ask for confirmation before execution")
 
 
@@ -162,7 +162,7 @@ def get_directory_tree_tool(path: str, **kwargs) -> str:
 
 @tool("execute_shell_command", args_schema=ShellCommandInput)
 def execute_shell_command_tool(command: str, confirm: bool = True) -> str:
-    """Execute a shell command with optional confirmation"""
+    """Execute a shell command - USE THIS PROACTIVELY for informational commands like date, curl, ls, pwd, whoami, etc. when users ask questions that commands can answer"""
     try:
         global _shell_manager, _confirmation_callback
         

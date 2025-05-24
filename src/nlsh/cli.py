@@ -64,7 +64,8 @@ def main_shell(
             llm_interface.setup_shell_integration(shell_manager)
             # Setup history integration for tool call logging
             llm_interface.setup_history_integration(history_manager)
-            console.print("[dim]Using LangGraph interface with tool calling and streaming[/dim]")
+            provider_info = f"{llm_interface.provider} ({llm_interface.model_name})"
+            console.print(f"[dim]Using LangGraph interface with {provider_info} - tool calling and streaming enabled[/dim]")
         else:
             llm_interface = LLMInterface()
             console.print("[dim]Using simple OpenAI interface[/dim]")
@@ -193,18 +194,19 @@ def handle_llm_chat(
         
         if use_langgraph and stream and hasattr(llm_interface, 'generate_chat_response_streaming'):
             response = llm_interface.generate_chat_response_streaming(prompt, context)
+            # Don't display response again - it was already streamed!
         elif use_langgraph and hasattr(llm_interface, 'generate_chat_response'):
             response = llm_interface.generate_chat_response(prompt, context)
+            # Display response as markdown for non-streaming mode
+            if response and response.strip():
+                markdown = Markdown(response)
+                console.print(markdown)
+            else:
+                console.print("[dim]No response generated[/dim]")
         else:
             # Fallback to simple chat for original interface
             response = f"Chat mode not fully supported with simple interface. Try: {prompt}"
-        
-        # Display response as markdown for better formatting
-        if response and response.strip():
-            markdown = Markdown(response)
-            console.print(markdown)
-        else:
-            console.print("[dim]No response generated[/dim]")
+            console.print(response)
         
         # Log the chat interaction
         history_manager.log_llm_interaction(
