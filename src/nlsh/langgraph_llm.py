@@ -12,7 +12,8 @@ from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict, Annotated
 
 from .context import ContextInfo
-from .tools import AVAILABLE_TOOLS
+from .tools import AVAILABLE_TOOLS, set_shell_manager, set_confirmation_callback
+from .streaming import create_streaming_interface, StreamingResponse, ConfirmationHandler
 
 
 class GraphState(TypedDict):
@@ -41,7 +42,8 @@ class LangGraphLLMInterface:
         self.llm = ChatOpenAI(
             model=self.model_name,
             temperature=0.1,
-            api_key=api_key
+            api_key=api_key,
+            streaming=True  # Enable streaming
         )
         
         # Bind tools to the model
@@ -52,6 +54,23 @@ class LangGraphLLMInterface:
         
         # Build the graph
         self.graph = self._build_graph()
+        
+        # Initialize streaming components
+        self.streaming_response = None
+        self.confirmation_handler = None
+    
+    def setup_shell_integration(self, shell_manager, confirmation_callback=None):
+        """Setup shell manager and confirmation callback for tools"""
+        set_shell_manager(shell_manager)
+        
+        if confirmation_callback:
+            set_confirmation_callback(confirmation_callback)
+        else:
+            # Create default confirmation handler
+            streaming_response, confirmation_handler = create_streaming_interface()
+            self.streaming_response = streaming_response
+            self.confirmation_handler = confirmation_handler
+            set_confirmation_callback(confirmation_handler.request_confirmation)
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow"""
@@ -280,4 +299,112 @@ Remember: Your final response should contain ONLY the commands, nothing else.
             response = self.llm.invoke([HumanMessage(content="test")])
             return True
         except Exception:
-            return False 
+            return False
+    
+    def generate_chat_response_streaming(self, prompt: str, context: ContextInfo) -> str:
+        """Generate a chat response using LangGraph with streaming (llm? mode)"""
+        try:
+            # Setup streaming
+            if not self.streaming_response:
+                self.streaming_response, self.confirmation_handler = create_streaming_interface()
+            
+            # Create initial state
+            initial_state = {
+                "messages": [HumanMessage(content=prompt)],
+                "context": context,
+                "mode": "chat",
+                "commands": []
+            }
+            
+            # Stream the graph execution
+            response_content = ""
+            for event in self.graph.stream(initial_state):
+                for node_name, node_output in event.items():
+                    if node_name == "agent":
+                        # Handle AI response
+                        messages = node_output.get("messages", [])
+                        for message in messages:
+                            if isinstance(message, AIMessage):
+                                if hasattr(message, 'tool_calls') and message.tool_calls:
+                                    # Handle tool calls with animation
+                                    for tool_call in message.tool_calls:
+                                        tool_name = tool_call.get('name', 'unknown_tool')
+                                        tool_args = tool_call.get('args', {})
+                                        self.streaming_response.start_tool_call(tool_name, tool_args)
+                                else:
+                                    # Stream text content
+                                    content = getattr(message, 'content', '')
+                                    if content:
+                                        response_content += content
+                                        
+                    elif node_name == "tools":
+                        # Handle tool results
+                        messages = node_output.get("messages", [])
+                        for message in messages:
+                            if hasattr(message, 'content'):
+                                self.streaming_response.finish_tool_call(message.content)
+            
+            self.streaming_response.finish_streaming()
+            return response_content or "No response generated"
+            
+        except Exception as e:
+            if self.streaming_response:
+                self.streaming_response.finish_streaming()
+            raise Exception(f"LLM API error: {e}")
+    
+    def generate_commands_streaming(self, prompt: str, context: ContextInfo) -> List[str]:
+        """Generate shell commands using LangGraph with streaming (llm: mode)"""
+        try:
+            # Setup streaming
+            if not self.streaming_response:
+                self.streaming_response, self.confirmation_handler = create_streaming_interface()
+            
+            # Create initial state
+            initial_state = {
+                "messages": [HumanMessage(content=prompt)],
+                "context": context,
+                "mode": "command",
+                "commands": []
+            }
+            
+            # Stream the graph execution
+            final_response = ""
+            for event in self.graph.stream(initial_state):
+                for node_name, node_output in event.items():
+                    if node_name == "agent":
+                        # Handle AI response
+                        messages = node_output.get("messages", [])
+                        for message in messages:
+                            if isinstance(message, AIMessage):
+                                if hasattr(message, 'tool_calls') and message.tool_calls:
+                                    # Handle tool calls with animation
+                                    for tool_call in message.tool_calls:
+                                        tool_name = tool_call.get('name', 'unknown_tool')
+                                        tool_args = tool_call.get('args', {})
+                                        self.streaming_response.start_tool_call(tool_name, tool_args)
+                                else:
+                                    # Stream text content
+                                    content = getattr(message, 'content', '')
+                                    if content:
+                                        final_response = content
+                                        
+                    elif node_name == "tools":
+                        # Handle tool results
+                        messages = node_output.get("messages", [])
+                        for message in messages:
+                            if hasattr(message, 'content'):
+                                self.streaming_response.finish_tool_call(message.content)
+            
+            self.streaming_response.finish_streaming()
+            
+            # Extract commands from the final response
+            if final_response:
+                commands = self._parse_commands(final_response)
+                return commands
+            
+            return []
+            
+        except Exception as e:
+            if self.streaming_response:
+                self.streaming_response.finish_streaming()
+            raise Exception(f"LLM API error: {e}") 

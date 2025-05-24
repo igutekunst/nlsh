@@ -10,6 +10,8 @@ An AI-augmented command line shell that wraps your existing shell and adds natur
 - **Command History**: Full SQLite-based history tracking of all commands and LLM interactions
 - **Safety First**: Always prompts for confirmation before executing AI-generated commands
 - **Rich Terminal Output**: Beautiful terminal interface powered by Rich
+- **Streaming Responses**: Real-time streaming with animated progress spinners for tool calls
+- **Tool-Enabled AI**: AI can execute shell commands, read files, and gather system information with confirmation
 
 ## Installation
 
@@ -64,7 +66,16 @@ OPENAI_MODEL=gpt-4o  # or gpt-3.5-turbo, etc.
 nlsh
 ```
 
-This will start the natural language shell interface.
+This will start the natural language shell interface with streaming enabled by default.
+
+#### Command Line Options
+
+```bash
+nlsh --help                    # Show all available options
+nlsh --no-stream              # Disable streaming (faster but less interactive)
+nlsh --use-simple             # Use simple OpenAI interface instead of LangGraph
+nlsh --debug                  # Enable debug mode
+```
 
 ### Commands
 
@@ -81,17 +92,18 @@ bitchin-shell $ git status
 Use the `llm:` prefix for AI-generated commands:
 
 ```bash
-bitchin-shell $ llm: find all python files larger than 1MB
-bitchin-shell $ llm: show me git commits from last week
-bitchin-shell $ llm: compress all jpg files in this directory
-bitchin-shell $ llm: install the requests package
+nlsh $ llm: find all python files larger than 1MB
+nlsh $ llm: show me git commits from last week
+nlsh $ llm: compress all jpg files in this directory
+nlsh $ llm: install the requests package
 ```
 
 The AI will:
-1. Analyze your request and current context (working directory, files, shell type)
-2. Generate appropriate shell commands
-3. Show you the commands and ask for confirmation
-4. Execute the commands if you approve
+1. **Analyze your request** and current context (working directory, files, shell type)
+2. **Use tools** to gather additional information if needed (with animated progress indicators)
+3. **Generate appropriate shell commands**
+4. **Show you the commands and ask for confirmation**
+5. **Execute the commands if you approve**
 
 #### Exiting
 ```bash
@@ -101,6 +113,23 @@ bitchin-shell $ quit
 ```
 
 ## How It Works
+
+### Streaming Interface
+nlsh features a modern streaming interface that shows:
+
+- **🔄 Animated spinners** for tool operations (file reading, directory listing, etc.)
+- **📁 Real-time tool call descriptions** ("Reading file: config.py", "Checking git status")
+- **💬 Streaming AI responses** as they're generated
+- **✅ Tool completion confirmations** with result previews
+
+### Tool-Enabled AI
+The AI has access to powerful tools:
+
+- **📁 File Operations**: List, read, and find files
+- **⚡ Shell Commands**: Execute commands with mandatory confirmation
+- **📊 Git Integration**: Check status, view logs, and diffs
+- **💻 System Info**: Access environment and system details
+- **🌳 Directory Trees**: Navigate and understand project structure
 
 ### Context Awareness
 The LLM receives rich context about your environment:

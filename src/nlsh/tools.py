@@ -2,12 +2,26 @@
 
 import os
 import subprocess
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from .shell import ShellManager
 from .context import ContextManager
+
+# Global references for shell execution and confirmation
+_shell_manager: Optional[ShellManager] = None
+_confirmation_callback: Optional[Callable[[str], bool]] = None
+
+def set_shell_manager(shell_manager: ShellManager):
+    """Set the global shell manager reference"""
+    global _shell_manager
+    _shell_manager = shell_manager
+
+def set_confirmation_callback(callback: Callable[[str], bool]):
+    """Set the global confirmation callback"""
+    global _confirmation_callback
+    _confirmation_callback = callback
 
 
 class FileOperationInput(BaseModel):
@@ -148,14 +162,36 @@ def get_directory_tree_tool(path: str, **kwargs) -> str:
 
 @tool("execute_shell_command", args_schema=ShellCommandInput)
 def execute_shell_command_tool(command: str, confirm: bool = True) -> str:
-    """Execute a shell command (with optional confirmation)"""
+    """Execute a shell command with optional confirmation"""
     try:
-        # Note: This tool is for information gathering only
-        # Actual command execution should be handled by the main CLI
-        return f"Command ready for execution: {command}"
+        global _shell_manager, _confirmation_callback
+        
+        if not _shell_manager:
+            return "Error: Shell manager not available"
+        
+        if not _confirmation_callback:
+            return "Error: Confirmation callback not available"
+        
+        # Always ask for confirmation for safety
+        if not _confirmation_callback(command):
+            return f"Command cancelled by user: {command}"
+        
+        # Execute the command
+        result = _shell_manager.execute_command(command)
+        
+        response = f"Command executed: {command}\n"
+        response += f"Exit code: {result.return_code}\n"
+        
+        if result.output:
+            response += f"Output:\n{result.output}"
+        
+        if result.error:
+            response += f"Error:\n{result.error}"
+        
+        return response
         
     except Exception as e:
-        return f"Error preparing command: {e}"
+        return f"Error executing command: {e}"
 
 
 @tool("git_status")

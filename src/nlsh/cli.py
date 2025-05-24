@@ -15,6 +15,7 @@ from .llm import LLMInterface
 from .langgraph_llm import LangGraphLLMInterface
 from .context import ContextManager
 from .history import HistoryManager
+from .streaming import create_streaming_interface
 
 console = Console()
 
@@ -43,7 +44,8 @@ class CommandHistory:
 
 def main_shell(
     debug: bool = typer.Option(False, "--debug", help="Enable debug mode"),
-    use_langgraph: bool = typer.Option(True, "--use-langgraph/--use-simple", help="Use LangGraph interface")
+    use_langgraph: bool = typer.Option(True, "--use-langgraph/--use-simple", help="Use LangGraph interface"),
+    stream: bool = typer.Option(True, "--stream/--no-stream", help="Enable streaming responses")
 ):
     """Start the natural language shell"""
     
@@ -57,7 +59,9 @@ def main_shell(
     try:
         if use_langgraph:
             llm_interface = LangGraphLLMInterface()
-            console.print("[dim]Using LangGraph interface with tool calling[/dim]")
+            # Setup shell integration for tool execution
+            llm_interface.setup_shell_integration(shell_manager)
+            console.print("[dim]Using LangGraph interface with tool calling and streaming[/dim]")
         else:
             llm_interface = LLMInterface()
             console.print("[dim]Using simple OpenAI interface[/dim]")
@@ -74,7 +78,10 @@ def main_shell(
     console.print("  [yellow]llm:[/yellow] <prompt> - Generate and execute shell commands")
     console.print("  [yellow]llm?[/yellow] <prompt> - Chat mode (information only)")
     console.print("  [yellow]exit[/yellow] or [yellow]quit[/yellow] - Exit nlsh")
-    console.print("  [dim]Use ↑/↓ arrow keys for command history[/dim]\n")
+    console.print("  [dim]Use ↑/↓ arrow keys for command history[/dim]")
+    if stream and use_langgraph:
+        console.print("  [dim]✨ Streaming enabled with animated tool calls[/dim]")
+    console.print()
     
     try:
         # Main shell loop
@@ -82,7 +89,7 @@ def main_shell(
             try:
                 # Get current working directory for prompt
                 cwd = os.getcwd()
-                prompt_text = f"{os.path.basename(cwd)} $ "
+                prompt_text = "nlsh $ "
                 
                 # Get user input with history support
                 user_input = prompt(
@@ -109,7 +116,8 @@ def main_shell(
                             context_manager,
                             history_manager,
                             llm_interface,
-                            use_langgraph
+                            use_langgraph,
+                            stream
                         )
                     else:
                         console.print("[yellow]Please provide a prompt after 'llm?'[/yellow]")
@@ -125,7 +133,8 @@ def main_shell(
                             context_manager,
                             history_manager,
                             llm_interface,
-                            use_langgraph
+                            use_langgraph,
+                            stream
                         )
                     else:
                         console.print("[yellow]Please provide a prompt after 'llm:'[/yellow]")
@@ -164,7 +173,8 @@ def handle_llm_chat(
     context_manager: 'ContextManager',
     history_manager: 'HistoryManager',
     llm_interface,
-    use_langgraph: bool
+    use_langgraph: bool,
+    stream: bool = True
 ):
     """Handle natural language chat (llm? mode)"""
     try:
@@ -176,15 +186,18 @@ def handle_llm_chat(
         context.shell_info = shell_info
         
         # Generate chat response
-        if use_langgraph and hasattr(llm_interface, 'generate_chat_response'):
+        console.print("\n[yellow]AI Response:[/yellow]")
+        
+        if use_langgraph and stream and hasattr(llm_interface, 'generate_chat_response_streaming'):
+            response = llm_interface.generate_chat_response_streaming(prompt, context)
+        elif use_langgraph and hasattr(llm_interface, 'generate_chat_response'):
             response = llm_interface.generate_chat_response(prompt, context)
         else:
             # Fallback to simple chat for original interface
             response = f"Chat mode not fully supported with simple interface. Try: {prompt}"
         
         # Display response as markdown for better formatting
-        console.print("\n[yellow]AI Response:[/yellow]")
-        if response.strip():
+        if response and response.strip():
             markdown = Markdown(response)
             console.print(markdown)
         else:
@@ -210,7 +223,8 @@ def handle_llm_command(
     context_manager: 'ContextManager',
     history_manager: 'HistoryManager',
     llm_interface,
-    use_langgraph: bool
+    use_langgraph: bool,
+    stream: bool = True
 ):
     """Handle natural language commands via LLM (llm: mode)"""
     try:
@@ -222,7 +236,10 @@ def handle_llm_command(
         context.shell_info = shell_info
         
         # Generate shell commands from LLM
-        suggested_commands = llm_interface.generate_commands(prompt, context)
+        if use_langgraph and stream and hasattr(llm_interface, 'generate_commands_streaming'):
+            suggested_commands = llm_interface.generate_commands_streaming(prompt, context)
+        else:
+            suggested_commands = llm_interface.generate_commands(prompt, context)
         
         if not suggested_commands:
             console.print("[yellow]No commands generated. Try rephrasing your request.[/yellow]")
