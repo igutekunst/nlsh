@@ -35,11 +35,21 @@ class ShellCommandEntry(HistoryEntry):
 class LLMInteractionEntry(HistoryEntry):
     """History entry for LLM interactions"""
     user_prompt: str
-    generated_commands: List[str]
-    executed_commands: List[str]
-    execution_results: List[Dict[str, Any]]  # List of CommandResult dicts
-    llm_model: str
+    llm_response: Optional[str] = None  # Add LLM response text
+    generated_commands: List[str] = None
+    executed_commands: List[str] = None
+    execution_results: List[Dict[str, Any]] = None  # List of CommandResult dicts
+    llm_model: str = "unknown"
     context_snapshot: Optional[str] = None
+
+
+@dataclass
+class ToolCallEntry(HistoryEntry):
+    """History entry for tool calls during LLM processing"""
+    tool_name: str
+    tool_args: Dict[str, Any]
+    tool_result: str
+    parent_interaction_id: Optional[str] = None  # Link to parent LLM interaction
 
 
 class HistoryManager:
@@ -55,11 +65,16 @@ class HistoryManager:
             
         self.db_path = str(db_path)
         self.session_id = self._generate_session_id()
+        self.current_interaction_id = None  # Track current LLM interaction for tool calls
         self._init_database()
     
     def _generate_session_id(self) -> str:
         """Generate a unique session ID"""
         return datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(os.getpid())
+    
+    def _generate_interaction_id(self) -> str:
+        """Generate a unique interaction ID for grouping tool calls"""
+        return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     
     def _init_database(self):
         """Initialize the SQLite database with required tables"""
@@ -99,12 +114,18 @@ class HistoryManager:
         
         self._save_entry(entry)
     
-    def log_llm_interaction(self, user_prompt: str, generated_commands: List[str], 
-                          executed_commands: List[str], execution_results: List[CommandResult],
+    def log_llm_interaction(self, user_prompt: str, llm_response: str = None, 
+                          generated_commands: List[str] = None, executed_commands: List[str] = None, 
+                          execution_results: List[CommandResult] = None,
                           llm_model: str = "unknown", context_snapshot: str = None):
-        """Log an LLM interaction"""
+        """Log an LLM interaction with full details"""
         # Convert CommandResult objects to dicts for JSON serialization
-        result_dicts = [asdict(result) for result in execution_results]
+        result_dicts = []
+        if execution_results:
+            result_dicts = [asdict(result) for result in execution_results]
+        
+        # Generate interaction ID for this LLM interaction
+        self.current_interaction_id = self._generate_interaction_id()
         
         entry = LLMInteractionEntry(
             id=None,
@@ -113,11 +134,29 @@ class HistoryManager:
             entry_type='llm_interaction',
             cwd=os.getcwd(),
             user_prompt=user_prompt,
-            generated_commands=generated_commands,
-            executed_commands=executed_commands,
+            llm_response=llm_response,
+            generated_commands=generated_commands or [],
+            executed_commands=executed_commands or [],
             execution_results=result_dicts,
             llm_model=llm_model,
             context_snapshot=context_snapshot
+        )
+        
+        self._save_entry(entry)
+        return self.current_interaction_id
+    
+    def log_tool_call(self, tool_name: str, tool_args: Dict[str, Any], tool_result: str):
+        """Log a tool call during LLM processing"""
+        entry = ToolCallEntry(
+            id=None,
+            timestamp=datetime.now(),
+            session_id=self.session_id,
+            entry_type='tool_call',
+            cwd=os.getcwd(),
+            tool_name=tool_name,
+            tool_args=tool_args,
+            tool_result=tool_result,
+            parent_interaction_id=self.current_interaction_id
         )
         
         self._save_entry(entry)

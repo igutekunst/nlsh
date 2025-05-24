@@ -62,6 +62,8 @@ def main_shell(
             llm_interface = LangGraphLLMInterface()
             # Setup shell integration for tool execution
             llm_interface.setup_shell_integration(shell_manager)
+            # Setup history integration for tool call logging
+            llm_interface.setup_history_integration(history_manager)
             console.print("[dim]Using LangGraph interface with tool calling and streaming[/dim]")
         else:
             llm_interface = LLMInterface()
@@ -207,6 +209,7 @@ def handle_llm_chat(
         # Log the chat interaction
         history_manager.log_llm_interaction(
             user_prompt=prompt,
+            llm_response=response,  # Include the actual AI response
             generated_commands=[],  # No commands in chat mode
             executed_commands=[],
             execution_results=[],
@@ -271,6 +274,7 @@ def handle_llm_command(
             # Log the interaction
             history_manager.log_llm_interaction(
                 user_prompt=prompt,
+                llm_response=f"Generated {len(suggested_commands)} command(s)",  # Description for command mode
                 generated_commands=suggested_commands,
                 executed_commands=executed_commands,
                 execution_results=execution_results,
@@ -278,6 +282,16 @@ def handle_llm_command(
                 context_snapshot=context_manager.format_context_for_llm(context, shell_info)
             )
         else:
+            # Log cancelled interaction
+            history_manager.log_llm_interaction(
+                user_prompt=prompt,
+                llm_response="User cancelled command execution",
+                generated_commands=suggested_commands,
+                executed_commands=[],
+                execution_results=[],
+                llm_model=getattr(llm_interface, 'model_name', 'unknown'),
+                context_snapshot=context_manager.format_context_for_llm(context, shell_info)
+            )
             console.print("Commands cancelled")
             
     except Exception as e:

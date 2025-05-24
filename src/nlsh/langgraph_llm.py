@@ -58,6 +58,9 @@ class LangGraphLLMInterface:
         # Initialize streaming components
         self.streaming_response = None
         self.confirmation_handler = None
+        
+        # History manager for logging tool calls
+        self.history_manager = None
     
     def setup_shell_integration(self, shell_manager, confirmation_callback=None):
         """Setup shell manager and confirmation callback for tools"""
@@ -71,6 +74,10 @@ class LangGraphLLMInterface:
             self.streaming_response = streaming_response
             self.confirmation_handler = confirmation_handler
             set_confirmation_callback(confirmation_handler.request_confirmation)
+    
+    def setup_history_integration(self, history_manager):
+        """Setup history manager for logging interactions and tool calls"""
+        self.history_manager = history_manager
     
     def _build_graph(self) -> StateGraph:
         """Build the LangGraph workflow"""
@@ -330,6 +337,8 @@ Remember: Your final response should contain ONLY the commands, nothing else.
             
             # Stream the graph execution
             response_content = ""
+            current_tool_calls = {}  # Track tool calls for logging
+            
             for event in self.graph.stream(initial_state):
                 for node_name, node_output in event.items():
                     if node_name == "agent":
@@ -342,6 +351,14 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                     for tool_call in message.tool_calls:
                                         tool_name = tool_call.get('name', 'unknown_tool')
                                         tool_args = tool_call.get('args', {})
+                                        tool_id = tool_call.get('id', str(len(current_tool_calls)))
+                                        
+                                        # Store for later logging
+                                        current_tool_calls[tool_id] = {
+                                            'name': tool_name,
+                                            'args': tool_args
+                                        }
+                                        
                                         self.streaming_response.start_tool_call(tool_name, tool_args)
                                 else:
                                     # Stream text content
@@ -353,8 +370,20 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                         # Handle tool results
                         messages = node_output.get("messages", [])
                         for message in messages:
-                            if hasattr(message, 'content'):
-                                self.streaming_response.finish_tool_call(message.content)
+                            if hasattr(message, 'content') and hasattr(message, 'tool_call_id'):
+                                tool_result = message.content
+                                tool_id = message.tool_call_id
+                                
+                                # Log tool call to history if we have a history manager
+                                if self.history_manager and tool_id in current_tool_calls:
+                                    tool_info = current_tool_calls[tool_id]
+                                    self.history_manager.log_tool_call(
+                                        tool_name=tool_info['name'],
+                                        tool_args=tool_info['args'],
+                                        tool_result=tool_result
+                                    )
+                                
+                                self.streaming_response.finish_tool_call(tool_result)
             
             self.streaming_response.finish_streaming()
             return response_content or "No response generated"
@@ -381,6 +410,8 @@ Remember: Your final response should contain ONLY the commands, nothing else.
             
             # Stream the graph execution
             final_response = ""
+            current_tool_calls = {}  # Track tool calls for logging
+            
             for event in self.graph.stream(initial_state):
                 for node_name, node_output in event.items():
                     if node_name == "agent":
@@ -393,6 +424,14 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                                     for tool_call in message.tool_calls:
                                         tool_name = tool_call.get('name', 'unknown_tool')
                                         tool_args = tool_call.get('args', {})
+                                        tool_id = tool_call.get('id', str(len(current_tool_calls)))
+                                        
+                                        # Store for later logging
+                                        current_tool_calls[tool_id] = {
+                                            'name': tool_name,
+                                            'args': tool_args
+                                        }
+                                        
                                         self.streaming_response.start_tool_call(tool_name, tool_args)
                                 else:
                                     # Stream text content
@@ -404,8 +443,20 @@ Remember: Your final response should contain ONLY the commands, nothing else.
                         # Handle tool results
                         messages = node_output.get("messages", [])
                         for message in messages:
-                            if hasattr(message, 'content'):
-                                self.streaming_response.finish_tool_call(message.content)
+                            if hasattr(message, 'content') and hasattr(message, 'tool_call_id'):
+                                tool_result = message.content
+                                tool_id = message.tool_call_id
+                                
+                                # Log tool call to history if we have a history manager
+                                if self.history_manager and tool_id in current_tool_calls:
+                                    tool_info = current_tool_calls[tool_id]
+                                    self.history_manager.log_tool_call(
+                                        tool_name=tool_info['name'],
+                                        tool_args=tool_info['args'],
+                                        tool_result=tool_result
+                                    )
+                                
+                                self.streaming_response.finish_tool_call(tool_result)
             
             self.streaming_response.finish_streaming()
             

@@ -53,7 +53,7 @@ class ContextManager:
             session_history=session_history
         )
     
-    def _get_session_history(self, history_manager, limit: int = 10) -> List[Dict]:
+    def _get_session_history(self, history_manager, limit: int = 15) -> List[Dict]:
         """Get formatted session history for context"""
         try:
             # Get recent entries from current session
@@ -76,11 +76,20 @@ class ContextManager:
                     }
                 elif entry['entry_type'] == 'llm_interaction':
                     formatted_entry = {
-                        'type': 'llm_interaction',
+                        'type': 'llm_interaction', 
                         'timestamp': entry['timestamp'],
                         'user_prompt': entry_data.get('user_prompt', ''),
+                        'llm_response': self._truncate_text(entry_data.get('llm_response', ''), 300),
                         'generated_commands': entry_data.get('generated_commands', []),
                         'executed_commands': entry_data.get('executed_commands', [])
+                    }
+                elif entry['entry_type'] == 'tool_call':
+                    formatted_entry = {
+                        'type': 'tool_call',
+                        'timestamp': entry['timestamp'],
+                        'tool_name': entry_data.get('tool_name', ''),
+                        'tool_args': entry_data.get('tool_args', {}),
+                        'tool_result': self._truncate_text(entry_data.get('tool_result', ''), 150)
                     }
                 else:
                     continue  # Skip other entry types for now
@@ -256,20 +265,30 @@ Filesystem Context:
         
         # Add session history if available
         if context.session_history:
-            context_str += "\nSession History (Recent Commands):\n"
+            context_str += "\nSession History (Recent Activity):\n"
             for i, entry in enumerate(context.session_history, 1):
                 if entry['type'] == 'shell_command':
                     success_indicator = "✅" if entry['success'] else "❌"
-                    context_str += f"  {i}. {success_indicator} {entry['command']}"
+                    context_str += f"  {i}. {success_indicator} Manual: {entry['command']}"
                     if entry['output_summary']:
                         context_str += f" -> {entry['output_summary']}"
                     context_str += "\n"
                 elif entry['type'] == 'llm_interaction':
-                    context_str += f"  {i}. 🤖 User asked: \"{entry['user_prompt']}\"\n"
+                    context_str += f"  {i}. 💬 User: \"{entry['user_prompt']}\"\n"
+                    if entry['llm_response']:
+                        context_str += f"      AI: {entry['llm_response']}\n"
                     if entry['executed_commands']:
-                        context_str += f"      Executed: {', '.join(entry['executed_commands'])}\n"
+                        context_str += f"      ✅ Executed: {', '.join(entry['executed_commands'])}\n"
                     elif entry['generated_commands']:
-                        context_str += f"      Suggested: {', '.join(entry['generated_commands'])}\n"
+                        context_str += f"      💡 Suggested: {', '.join(entry['generated_commands'])}\n"
+                elif entry['type'] == 'tool_call':
+                    tool_args_str = ', '.join([f"{k}={v}" for k, v in list(entry['tool_args'].items())[:2]])
+                    if len(entry['tool_args']) > 2:
+                        tool_args_str += "..."
+                    context_str += f"  {i}. 🔧 Tool: {entry['tool_name']}({tool_args_str})"
+                    if entry['tool_result']:
+                        context_str += f" -> {entry['tool_result']}"
+                    context_str += "\n"
         
         # Add system context
         context_str += f"""
