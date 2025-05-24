@@ -185,6 +185,8 @@ class LangGraphLLMInterface:
         
         system_content = """You are a helpful AI assistant with access to shell and file system tools.
 
+Use shell commands and tools whenever appropriate to provide accurate, up-to-date information about the user's environment.
+
 You can help users with:
 - File and directory operations
 - Git repository information
@@ -198,10 +200,16 @@ You have access to tools that can:
 - Get git status and logs
 - Get system information
 - Get directory trees
+- Execute shell commands (with confirmation)
 
-Use these tools when helpful to answer the user's questions. Provide informative and helpful responses.
+IMPORTANT: Always use tools proactively when they would help answer the question or provide better information. For example:
+- If asked about files, use list_files or read_file tools
+- If asked about the current directory, use get_working_directory
+- If asked about git, use git_status or git_log tools
+- If asked about system info, use get_system_info
+- If the user wants to perform an action, suggest using the execute_shell_command tool
 
-For questions about the current environment, use the available tools to get up-to-date information.
+Don't rely solely on the provided context - use tools to get fresh, accurate information whenever relevant.
 """
         
         if context:
@@ -219,16 +227,20 @@ For questions about the current environment, use the available tools to get up-t
         
         system_content = f"""You are an expert command-line assistant that generates {shell_name} shell commands.
 
-You can use available tools to gather information before generating commands.
+Use shell commands and tools whenever appropriate to understand the environment before generating commands.
 
 Key Guidelines:
-1. Use tools to understand the current environment first
-2. Generate ONLY valid {shell_name} commands that can be executed directly
-3. Respond with one or more commands, each on a separate line
-4. Do NOT include explanations, comments, or markdown formatting
-5. Do NOT use backticks or code blocks
-6. Be precise and safe - avoid destructive operations unless explicitly requested
-7. Consider the current working directory and available files
+1. ALWAYS use tools to understand the current environment first before generating commands
+2. Use list_files, read_file, get_working_directory, git_status, and other tools proactively
+3. Generate ONLY valid {shell_name} commands that can be executed directly
+4. Respond with one or more commands, each on a separate line
+5. Do NOT include explanations, comments, or markdown formatting
+6. Do NOT use backticks or code blocks
+7. Be precise and safe - avoid destructive operations unless explicitly requested
+8. Consider the current working directory and available files
+9. Use the execute_shell_command tool if the user wants immediate execution
+
+IMPORTANT: Don't guess about the environment - use tools to gather current information first, then provide appropriate commands based on what you discover.
 
 After using tools to gather information, provide your final response as shell commands only.
 

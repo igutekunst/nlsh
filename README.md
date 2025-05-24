@@ -99,11 +99,12 @@ nlsh $ llm: install the requests package
 ```
 
 The AI will:
-1. **Analyze your request** and current context (working directory, files, shell type)
-2. **Use tools** to gather additional information if needed (with animated progress indicators)
-3. **Generate appropriate shell commands**
-4. **Show you the commands and ask for confirmation**
-5. **Execute the commands if you approve**
+1. **Proactively use tools** to understand your environment (directory contents, git status, system info, etc.)
+2. **Analyze your request** and current context (working directory, files, shell type)
+3. **Gather additional information** if needed (with animated progress indicators)
+4. **Generate appropriate shell commands** based on discovered information
+5. **Show you the commands and ask for confirmation**
+6. **Execute the commands if you approve**
 
 #### Exiting
 ```bash
@@ -123,13 +124,15 @@ nlsh features a modern streaming interface that shows:
 - **✅ Tool completion confirmations** with result previews
 
 ### Tool-Enabled AI
-The AI has access to powerful tools:
+The AI has access to powerful tools and uses them proactively:
 
 - **📁 File Operations**: List, read, and find files
 - **⚡ Shell Commands**: Execute commands with mandatory confirmation
 - **📊 Git Integration**: Check status, view logs, and diffs
 - **💻 System Info**: Access environment and system details
 - **🌳 Directory Trees**: Navigate and understand project structure
+
+**Key Feature**: The AI automatically uses these tools when relevant - you don't need to explicitly ask it to "check files" or "use git status". It proactively gathers information to provide better responses and commands.
 
 ### Context Awareness
 The LLM receives rich context about your environment:

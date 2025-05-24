@@ -16,6 +16,7 @@ from .langgraph_llm import LangGraphLLMInterface
 from .context import ContextManager
 from .history import HistoryManager
 from .streaming import create_streaming_interface
+from .utils import confirm_action
 
 console = Console()
 
@@ -250,7 +251,7 @@ def handle_llm_command(
         for i, cmd in enumerate(suggested_commands, 1):
             console.print(f"  {i}. [cyan]{cmd}[/cyan]")
         
-        if typer.confirm("\nExecute these commands?"):
+        if confirm_action("\nExecute these commands?"):
             executed_commands = []
             execution_results = []
             

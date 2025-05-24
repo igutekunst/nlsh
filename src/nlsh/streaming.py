@@ -10,6 +10,8 @@ from rich.text import Text
 from rich.panel import Panel
 from rich.columns import Columns
 
+from .utils import confirm_action
+
 console = Console()
 
 
@@ -134,7 +136,7 @@ class ConfirmationHandler:
         self.pending_confirmations = []
     
     def request_confirmation(self, command: str) -> bool:
-        """Request confirmation for a command with nice formatting"""
+        """Request confirmation for a command with nice formatting and single-key input"""
         console.print()  # Add space
         console.print(Panel(
             f"[yellow]Command to execute:[/yellow]\n[cyan]{command}[/cyan]",
@@ -142,9 +144,7 @@ class ConfirmationHandler:
             border_style="yellow"
         ))
         
-        # Use typer for confirmation
-        import typer
-        return typer.confirm("Execute this command?")
+        return confirm_action("Execute this command?")
 
 
 def create_streaming_interface() -> tuple[StreamingResponse, ConfirmationHandler]:
