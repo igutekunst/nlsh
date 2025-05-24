@@ -179,8 +179,8 @@ def handle_llm_chat(
 ):
     """Handle natural language chat (llm? mode)"""
     try:
-        # Get current context
-        context = context_manager.get_context()
+        # Get current context with session history
+        context = context_manager.get_context(history_manager)
         
         # Get shell info and add to context
         shell_info = shell_manager.get_shell_info()
@@ -229,8 +229,8 @@ def handle_llm_command(
 ):
     """Handle natural language commands via LLM (llm: mode)"""
     try:
-        # Get current context
-        context = context_manager.get_context()
+        # Get current context with session history
+        context = context_manager.get_context(history_manager)
         
         # Get shell info and add to context
         shell_info = shell_manager.get_shell_info()

@@ -142,6 +142,7 @@ The LLM receives rich context about your environment:
 - **System information** (OS, architecture)
 - **Environment variables** (PATH, HOME, etc.)
 - **Recent command history**
+- **Session conversation history** for long-running interactions
 
 ### Shell Detection
 nlsh automatically detects your shell from the `$SHELL` environment variable and adapts:
@@ -157,6 +158,23 @@ All interactions are stored in SQLite database (`~/.nlsh/history.db`):
 - LLM interactions (prompts, generated commands, execution results)
 - Context snapshots
 - Session information
+
+### Session History Awareness
+nlsh maintains awareness of your current session's history to enable natural, long-running conversations:
+
+- **Previous commands and their results** are included in the LLM context
+- **Past AI interactions** help the AI understand conversation flow
+- **Failed commands** are remembered to avoid repeating mistakes
+- **Successful patterns** can be referenced in follow-up requests
+
+This enables commands like:
+```bash
+nlsh $ llm: find all large log files
+# AI finds files and shows commands
+
+nlsh $ llm: now compress those files from the previous search
+# AI remembers the previous search results and can reference them
+```
 
 ## Examples
 
@@ -251,7 +269,6 @@ nlsh --debug
 ## Roadmap
 
 ### Phase 2 Features (Planned)
-- **Contextual Memory**: LLM remembers previous session context
 - **Follow-up Commands**: "rerun that but with sudo", "do the same for .js files"  
 - **Trusted Commands**: Auto-execute safe commands without confirmation
 - **Plugin System**: Extensible AI tools and integrations

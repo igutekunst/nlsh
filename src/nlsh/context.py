@@ -25,6 +25,7 @@ class ContextInfo:
     filesystem: Dict[str, List[FileInfo]]
     environment: dict
     system_info: dict
+    session_history: Optional[List[Dict]] = None
 
 
 class ContextManager:
@@ -34,17 +35,71 @@ class ContextManager:
         self.max_depth = max_depth
         self.max_files_per_dir = max_files_per_dir
         
-    def get_context(self) -> ContextInfo:
+    def get_context(self, history_manager=None) -> ContextInfo:
         """Get complete context information"""
         cwd = os.getcwd()
+        
+        # Get session history if history_manager is provided
+        session_history = None
+        if history_manager:
+            session_history = self._get_session_history(history_manager)
         
         return ContextInfo(
             cwd=cwd,
             shell_info=self._get_shell_context(),
             filesystem=self._get_filesystem_context(cwd),
             environment=self._get_environment_context(),
-            system_info=self._get_system_context()
+            system_info=self._get_system_context(),
+            session_history=session_history
         )
+    
+    def _get_session_history(self, history_manager, limit: int = 10) -> List[Dict]:
+        """Get formatted session history for context"""
+        try:
+            # Get recent entries from current session
+            entries = history_manager.get_session_history()
+            
+            # Limit to recent entries and format for context
+            recent_entries = entries[-limit:] if len(entries) > limit else entries
+            
+            formatted_history = []
+            for entry in recent_entries:
+                entry_data = entry.get('data', {})
+                
+                if entry['entry_type'] == 'shell_command':
+                    formatted_entry = {
+                        'type': 'shell_command',
+                        'timestamp': entry['timestamp'],
+                        'command': entry_data.get('command', ''),
+                        'success': entry_data.get('return_code', 0) == 0,
+                        'output_summary': self._truncate_text(entry_data.get('output', ''), 200)
+                    }
+                elif entry['entry_type'] == 'llm_interaction':
+                    formatted_entry = {
+                        'type': 'llm_interaction',
+                        'timestamp': entry['timestamp'],
+                        'user_prompt': entry_data.get('user_prompt', ''),
+                        'generated_commands': entry_data.get('generated_commands', []),
+                        'executed_commands': entry_data.get('executed_commands', [])
+                    }
+                else:
+                    continue  # Skip other entry types for now
+                    
+                formatted_history.append(formatted_entry)
+                
+            return formatted_history
+            
+        except Exception:
+            # If history retrieval fails, return empty list
+            return []
+    
+    def _truncate_text(self, text: str, max_length: int) -> str:
+        """Truncate text to maximum length with ellipsis"""
+        if not text:
+            return ""
+        if len(text) <= max_length:
+            return text
+        return text[:max_length-3] + "..."
     
     def _get_shell_context(self) -> dict:
         """Get shell-specific context (will be populated by ShellManager)"""
@@ -198,6 +253,23 @@ Filesystem Context:
                 
             if len(files) > 25:
                 context_str += f"  ... and {len(files) - 25} more items\n"
+        
+        # Add session history if available
+        if context.session_history:
+            context_str += "\nSession History (Recent Commands):\n"
+            for i, entry in enumerate(context.session_history, 1):
+                if entry['type'] == 'shell_command':
+                    success_indicator = "✅" if entry['success'] else "❌"
+                    context_str += f"  {i}. {success_indicator} {entry['command']}"
+                    if entry['output_summary']:
+                        context_str += f" -> {entry['output_summary']}"
+                    context_str += "\n"
+                elif entry['type'] == 'llm_interaction':
+                    context_str += f"  {i}. 🤖 User asked: \"{entry['user_prompt']}\"\n"
+                    if entry['executed_commands']:
+                        context_str += f"      Executed: {', '.join(entry['executed_commands'])}\n"
+                    elif entry['generated_commands']:
+                        context_str += f"      Suggested: {', '.join(entry['generated_commands'])}\n"
         
         # Add system context
         context_str += f"""
