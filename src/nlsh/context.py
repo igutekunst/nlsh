@@ -1,0 +1,228 @@
+"""Context management for filesystem and environment state"""
+
+import os
+import platform
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+from pathlib import Path
+
+
+@dataclass
+class FileInfo:
+    """Information about a file or directory"""
+    name: str
+    path: str
+    is_dir: bool
+    size: Optional[int] = None
+    modified: Optional[float] = None
+
+
+@dataclass
+class ContextInfo:
+    """Complete context information for LLM"""
+    cwd: str
+    shell_info: dict
+    filesystem: Dict[str, List[FileInfo]]
+    environment: dict
+    system_info: dict
+
+
+class ContextManager:
+    """Manages context information for LLM requests"""
+    
+    def __init__(self, max_depth: int = 3, max_files_per_dir: int = 50):
+        self.max_depth = max_depth
+        self.max_files_per_dir = max_files_per_dir
+        
+    def get_context(self) -> ContextInfo:
+        """Get complete context information"""
+        cwd = os.getcwd()
+        
+        return ContextInfo(
+            cwd=cwd,
+            shell_info=self._get_shell_context(),
+            filesystem=self._get_filesystem_context(cwd),
+            environment=self._get_environment_context(),
+            system_info=self._get_system_context()
+        )
+    
+    def _get_shell_context(self) -> dict:
+        """Get shell-specific context (will be populated by ShellManager)"""
+        # This will be enhanced when called with shell_manager.get_shell_info()
+        return {
+            'name': os.environ.get('SHELL', '').split('/')[-1] or 'unknown',
+            'path': os.environ.get('SHELL', ''),
+        }
+    
+    def _get_filesystem_context(self, root_path: str) -> Dict[str, List[FileInfo]]:
+        """Get recursive filesystem context with depth limits"""
+        filesystem = {}
+        
+        try:
+            # Scan current directory and subdirectories
+            for current_depth in range(self.max_depth + 1):
+                if current_depth == 0:
+                    # Current directory
+                    path_key = "."
+                    scan_path = root_path
+                else:
+                    # Skip deeper directories for now - implement recursive scanning
+                    continue
+                    
+                filesystem[path_key] = self._scan_directory(scan_path)
+                
+            # Also scan immediate subdirectories
+            try:
+                current_files = filesystem.get(".", [])
+                subdirs = [f for f in current_files if f.is_dir]
+                
+                for subdir in subdirs[:10]:  # Limit to first 10 subdirectories
+                    subdir_path = os.path.join(root_path, subdir.name)
+                    rel_path = f"./{subdir.name}"
+                    filesystem[rel_path] = self._scan_directory(subdir_path, depth=1)
+                    
+            except Exception:
+                pass  # Continue if subdirectory scanning fails
+                
+        except Exception as e:
+            # If filesystem scanning fails, at least provide current directory info
+            filesystem["."] = []
+            
+        return filesystem
+    
+    def _scan_directory(self, path: str, depth: int = 0) -> List[FileInfo]:
+        """Scan a single directory and return file information"""
+        files = []
+        
+        try:
+            # Don't scan if we're at max depth
+            if depth >= self.max_depth:
+                return files
+                
+            entries = list(os.listdir(path))
+            
+            # Sort entries: directories first, then files, both alphabetically
+            entries.sort(key=lambda x: (not os.path.isdir(os.path.join(path, x)), x.lower()))
+            
+            # Limit number of files to prevent overwhelming context
+            entries = entries[:self.max_files_per_dir]
+            
+            for entry in entries:
+                try:
+                    entry_path = os.path.join(path, entry)
+                    stat_info = os.stat(entry_path)
+                    
+                    is_dir = os.path.isdir(entry_path)
+                    
+                    files.append(FileInfo(
+                        name=entry,
+                        path=entry_path,
+                        is_dir=is_dir,
+                        size=None if is_dir else stat_info.st_size,
+                        modified=stat_info.st_mtime
+                    ))
+                    
+                except (OSError, PermissionError):
+                    # Skip files we can't access
+                    continue
+                    
+        except (OSError, PermissionError):
+            # Return empty list if we can't read the directory
+            pass
+            
+        return files
+    
+    def _get_environment_context(self) -> dict:
+        """Get relevant environment variables"""
+        # Include common environment variables that might be useful
+        relevant_vars = [
+            'PATH', 'HOME', 'USER', 'SHELL', 'TERM', 'LANG',
+            'PWD', 'OLDPWD', 'PS1', 'EDITOR', 'PAGER'
+        ]
+        
+        env_context = {}
+        for var in relevant_vars:
+            value = os.environ.get(var)
+            if value:
+                env_context[var] = value
+                
+        return env_context
+    
+    def _get_system_context(self) -> dict:
+        """Get system information"""
+        return {
+            'platform': platform.system(),
+            'platform_release': platform.release(),
+            'platform_version': platform.version(),
+            'architecture': platform.machine(),
+            'python_version': platform.python_version(),
+        }
+    
+    def format_context_for_llm(self, context: ContextInfo, shell_info: dict = None) -> str:
+        """Format context information for LLM consumption"""
+        # Override shell_info if provided (from ShellManager)
+        if shell_info:
+            context.shell_info = shell_info
+            
+        context_str = f"""Current Context:
+
+Working Directory: {context.cwd}
+
+Shell Information:
+- Name: {context.shell_info.get('name', 'unknown')}
+- Path: {context.shell_info.get('path', 'unknown')}
+- Version: {context.shell_info.get('version', 'unknown')}
+
+Filesystem Context:
+"""
+        
+        # Add filesystem information
+        for path, files in context.filesystem.items():
+            if not files:
+                continue
+                
+            context_str += f"\n{path}/:\n"
+            
+            # Group by directories and files
+            dirs = [f for f in files if f.is_dir]
+            regular_files = [f for f in files if not f.is_dir]
+            
+            # Show directories first
+            for d in dirs[:10]:  # Limit output
+                context_str += f"  📁 {d.name}/\n"
+                
+            # Show files
+            for f in regular_files[:15]:  # Limit output
+                size_str = f" ({self._format_size(f.size)})" if f.size else ""
+                context_str += f"  📄 {f.name}{size_str}\n"
+                
+            if len(files) > 25:
+                context_str += f"  ... and {len(files) - 25} more items\n"
+        
+        # Add system context
+        context_str += f"""
+System Information:
+- Platform: {context.system_info['platform']} {context.system_info['platform_release']}
+- Architecture: {context.system_info['architecture']}
+
+Environment Variables:
+"""
+        
+        # Add key environment variables
+        for key, value in list(context.environment.items())[:8]:
+            # Truncate long values
+            display_value = value if len(value) < 100 else value[:97] + "..."
+            context_str += f"- {key}: {display_value}\n"
+            
+        return context_str
+    
+    def _format_size(self, size_bytes: int) -> str:
+        """Format file size in human readable format"""
+        if size_bytes < 1024:
+            return f"{size_bytes}B"
+        elif size_bytes < 1024 * 1024:
+            return f"{size_bytes // 1024}KB"
+        elif size_bytes < 1024 * 1024 * 1024:
+            return f"{size_bytes // (1024 * 1024)}MB"
+        else:
+            return f"{size_bytes // (1024 * 1024 * 1024)}GB" 
