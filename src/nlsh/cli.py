@@ -17,7 +17,6 @@ from .context import ContextManager
 from .history import HistoryManager
 
 console = Console()
-app = typer.Typer(help="Natural Language Shell - AI-augmented command line")
 
 class CommandHistory:
     """Manages command history for arrow key navigation"""
@@ -42,8 +41,7 @@ class CommandHistory:
         return all_commands[-limit:]
 
 
-@app.command()
-def main(
+def main_shell(
     debug: bool = typer.Option(False, "--debug", help="Enable debug mode"),
     use_langgraph: bool = typer.Option(True, "--use-langgraph/--use-simple", help="Use LangGraph interface")
 ):
@@ -289,6 +287,15 @@ def handle_shell_command(
             
     except Exception as e:
         console.print(f"[red]Shell Error: {e}[/red]")
+
+
+# Create the app with callback as the main shell
+app = typer.Typer(
+    help="Natural Language Shell - AI-augmented command line",
+    callback=main_shell,
+    no_args_is_help=False,
+    invoke_without_command=True
+)
 
 
 @app.command()
